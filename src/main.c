@@ -7,23 +7,48 @@
 
 #include "FreeRTOS.h"
 #include "task.h"
-#include "semphr.h"
-
 
 /* ******************************************************
  *      Global Context
  * ******************************************************/
 #define LUM_OFFSET 100
+#define NB_CALIB_SAMPLES 100
 
-int cycle = 0;
 int nbTIM2 = 0;
 int nbTimeIdle = 0;
 
-uint16_t sensors[2];
+uint16_t sensors[2]; // [0] = left sensor (PC1) , [1], right sensor (PA5)
 uint8_t sensorIndex = 0;
+int cycle = 0;
+int nbOverrun = 0;
 
-uint16_t lumR = 0;
-uint16_t lumL = 0;
+int16_t calibOffset = 0; // Left - right under the same light
+bool isCalibrated = false;
+
+
+/* ******************************************************
+ *      Sensor Computation
+ * ******************************************************/
+
+
+int16_t computeGap(void)
+{
+    return (int16_t)sensors[0] - (int16_t)sensors[1] - calibOffset;
+}
+
+void calibrateSensors(void)
+{
+    int32_t sumLeft = 0, sumRight = 0;
+
+    for (int i = 0; i < NB_CALIB_SAMPLES; i++)
+    {
+        vTaskDelay(1);
+        sumLeft  += sensors[0];
+        sumRight += sensors[1];
+    }
+    calibOffset  = (sumLeft - sumRight) / NB_CALIB_SAMPLES;
+    isCalibrated = true;
+}
 
 
 /* ******************************************************
@@ -37,7 +62,11 @@ void vApplicationTickHook(void)
 
 void vAutomateTask(void * pvParameters)
 {
-
+    calibrateSensors();                   // calibrate at the start, only 1 time
+    for (;;)
+    {
+        vTaskDelay(100);   // State machine
+    }
 }
 
 void vServoTask(void * pvParameters)
@@ -53,11 +82,9 @@ void vDisplayTask(void * pvParameters)
     uint32_t back_color = LCD_COLOR_LIGHTGRAY;
     uint32_t text_color = LCD_COLOR_BLACK;
 
-    // TickType_t xLastWakeTime = xTaskGetTickCount();
-
     for( ;; )
     {
-    	vTaskDelay(1000);
+    	vTaskDelay(100);
 
     	if (BSP_PB_GetState(BUTTON_KEY) != 0)
     	{
@@ -69,18 +96,20 @@ void vDisplayTask(void * pvParameters)
 		}
     	BSP_LCD_SetBackColor(back_color);
 
-    	snprintf(msg, 20, "%d", cycle);                     // TIM2 cycles
-    	LCDdisplayText(8, LCD_COLOR_GREEN, msg);
+    	snprintf(msg, 20, "cycle %d", cycle);                     // TIM2 cycles
+    	LCDdisplayText(2, LCD_COLOR_GREEN, msg);
 
-    	snprintf(msg, 20, "%5u", sensors[0]);                     // Lum sensor right
-    	LCDdisplayText(10, LCD_COLOR_RED, msg);
+    	snprintf(msg, 20, "Left: %5u", sensors[0]);                     // Lum sensor left
+    	LCDdisplayText(4, LCD_COLOR_RED, msg);
 
-    	snprintf(msg, 20, "%5u", sensors[1]);                     // Lum sensor left
-    	LCDdisplayText(12, LCD_COLOR_RED, msg);
+    	snprintf(msg, 20, "Right: %5u", sensors[1]);                     // Lum sensor right
+    	LCDdisplayText(6, LCD_COLOR_RED, msg);
 
-    	//vTaskDelayUntil(&xLastWakeTime, 1000);
-    	//TimFreq = nbTIM2 - prevTIM2;
-    	//prevTIM2 = nbTIM2;
+    	snprintf(msg, 20, "Offset: %5d", calibOffset);                     // Sensor Offset
+    	LCDdisplayText(8, LCD_COLOR_ORANGE, msg);
+
+    	snprintf(msg, 20, "overrun: %5d",nbOverrun);                     // Gap between sensor
+    	LCDdisplayText(10, LCD_COLOR_DARKCYAN, msg);
     }
 }
 
@@ -90,10 +119,10 @@ int main(void)
     LCDdisplayInit(COLORS_NORMAL);  // init display
 
     TaskHandle_t handleAutomate = NULL;
-    TaskHandle_t handleServo = NULL;
+    //TaskHandle_t handleServo = NULL;
     TaskHandle_t handleDisplay = NULL;
 
-    //xTaskCreate( vAutomateTask, "Automate task", configMINIMAL_STACK_SIZE, (void*) 1, tskIDLE_PRIORITY + 1, &handleAutomate);
+    xTaskCreate( vAutomateTask, "Automate task", configMINIMAL_STACK_SIZE, (void*) 1, tskIDLE_PRIORITY + 1, &handleAutomate);
 
     //xTaskCreate( vServoTask, "Servo task", configMINIMAL_STACK_SIZE, (void*) 1, tskIDLE_PRIORITY + 3, &handleServo);
 
@@ -121,18 +150,21 @@ void ADC_IRQHandler(void)
 {
     if (__HAL_ADC_GET_FLAG(&gAdcHandle, ADC_FLAG_OVR))
     {
-        __HAL_ADC_CLEAR_FLAG(&gAdcHandle, ADC_FLAG_OVR);
+        nbOverrun++;
+        (void)HAL_ADC_GetValue(&gAdcHandle);
+        __HAL_ADC_CLEAR_FLAG(&gAdcHandle, ADC_FLAG_OVR | ADC_FLAG_EOC);
         sensorIndex = 0;
+        HAL_ADC_Stop_IT(&gAdcHandle);
+        HAL_ADC_Start_IT(&gAdcHandle);
         return;
     }
 
     if (__HAL_ADC_GET_FLAG(&gAdcHandle, ADC_FLAG_EOC))
     {
         sensors[sensorIndex] = HAL_ADC_GetValue(&gAdcHandle);
-        sensorIndex++;
-        if (sensorIndex >= 2)
+        if (++sensorIndex >= 2)
         {
-        	sensorIndex = 0;
+            sensorIndex = 0;
             cycle++;
         }
     }
