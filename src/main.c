@@ -48,7 +48,6 @@ void vServoTask(void * pvParameters)
 void vDisplayTask(void * pvParameters)
 {
     char msg[20] = {0};
-    int TimFreq = 0;
 
     bool toggled = false;
     uint32_t back_color = LCD_COLOR_LIGHTGRAY;
@@ -73,11 +72,11 @@ void vDisplayTask(void * pvParameters)
     	snprintf(msg, 20, "%d", cycle);                     // TIM2 cycles
     	LCDdisplayText(8, LCD_COLOR_GREEN, msg);
 
-    	snprintf(msg, 20, "%5u", lum);                     // Lum sensor right
+    	snprintf(msg, 20, "%5u", sensors[0]);                     // Lum sensor right
     	LCDdisplayText(10, LCD_COLOR_RED, msg);
 
-    	snprintf(msg, 20, "%5u", lum);                     // Lum sensor left
-    	LCDdisplayText(10, LCD_COLOR_RED, msg);
+    	snprintf(msg, 20, "%5u", sensors[1]);                     // Lum sensor left
+    	LCDdisplayText(12, LCD_COLOR_RED, msg);
 
     	//vTaskDelayUntil(&xLastWakeTime, 1000);
     	//TimFreq = nbTIM2 - prevTIM2;
@@ -94,9 +93,9 @@ int main(void)
     TaskHandle_t handleServo = NULL;
     TaskHandle_t handleDisplay = NULL;
 
-    xTaskCreate( vAutomateTask, "Automate task", configMINIMAL_STACK_SIZE, (void*) 1, tskIDLE_PRIORITY + 1, &handleAutomate);
+    //xTaskCreate( vAutomateTask, "Automate task", configMINIMAL_STACK_SIZE, (void*) 1, tskIDLE_PRIORITY + 1, &handleAutomate);
 
-    xTaskCreate( vServoTask, "Servo task", configMINIMAL_STACK_SIZE, (void*) 1, tskIDLE_PRIORITY + 3, &handleServo);
+    //xTaskCreate( vServoTask, "Servo task", configMINIMAL_STACK_SIZE, (void*) 1, tskIDLE_PRIORITY + 3, &handleServo);
 
     xTaskCreate( vDisplayTask, "Display task", configMINIMAL_STACK_SIZE, (void*) 1, tskIDLE_PRIORITY + 2, &handleDisplay);
 
@@ -123,17 +122,17 @@ void ADC_IRQHandler(void)
     if (__HAL_ADC_GET_FLAG(&gAdcHandle, ADC_FLAG_OVR))
     {
         __HAL_ADC_CLEAR_FLAG(&gAdcHandle, ADC_FLAG_OVR);
-        adcIndex = 0;
+        sensorIndex = 0;
         return;
     }
 
     if (__HAL_ADC_GET_FLAG(&gAdcHandle, ADC_FLAG_EOC))
     {
-        adcValues[adcIndex] = HAL_ADC_GetValue(&gAdcHandle);
-        adcIndex++;
-        if (adcIndex >= 2)
+        sensors[sensorIndex] = HAL_ADC_GetValue(&gAdcHandle);
+        sensorIndex++;
+        if (sensorIndex >= 2)
         {
-            adcIndex = 0;
+        	sensorIndex = 0;
             cycle++;
         }
     }
