@@ -155,9 +155,9 @@ void initTimer(void)
     __TIM2_CLK_ENABLE();
 
     /* Timer 2 initialization and configuration */
-    gTimHandle.Instance = TIM2;                             // base 180 MHz
-    gTimHandle.Init.Period = 1000 - 1;                      // 180 KHz
-    gTimHandle.Init.Prescaler = (90000000 / 40000000) - 1;  // 90 KHz
+    gTimHandle.Instance = TIM2;
+    gTimHandle.Init.Period = 9 - 1;                      // 90 MHz / 9 = 10 MHHz
+    gTimHandle.Init.Prescaler = 100 - 1;  				 // 10 MHz / 100 = 100 kHz -> Tick every 10 millisec
     gTimHandle.Init.CounterMode = TIM_COUNTERMODE_UP;
     gTimHandle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     gTimHandle.Init.RepetitionCounter = 0;
