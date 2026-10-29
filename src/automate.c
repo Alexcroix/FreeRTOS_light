@@ -42,9 +42,13 @@ static State nextState(State state, const Event *evt)
 static void updateServoAngle(void)
 {
     int16_t gap = computeGap();
-    if (abs(gap) < GAP_EVENT_THRESHOLD) return;     // zone morte
+    if (abs(gap) < GAP_EVENT_THRESHOLD) return;      // zone morte
 
-    servoSetAngle(servoGetAngle() + TRACK_SIGN * gap / TRACK_GAIN_DIV);
+    int16_t step = TRACK_SIGN * gap / TRACK_GAIN_DIV;
+    if (step >  TRACK_MAX_STEP_DEG) step =  TRACK_MAX_STEP_DEG;
+    if (step < -TRACK_MAX_STEP_DEG) step = -TRACK_MAX_STEP_DEG;
+
+    servoSetAngle(servoGetAngle() + step);
 }
 
 void vAutomateTask(void *pvParameters)
